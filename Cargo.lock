@@ -7597,6 +7597,7 @@ dependencies = [
  "gpui_util",
  "gpui_wgpu",
  "http_client",
+ "image",
  "libc",
  "log",
  "notify-rust",
@@ -7688,6 +7689,7 @@ dependencies = [
  "gpui_macos",
  "gpui_web",
  "gpui_windows",
+ "log",
 ]
 
 [[package]]
@@ -7753,6 +7755,7 @@ dependencies = [
  "etagere",
  "gpui",
  "gpui_util",
+ "image",
  "itertools 0.14.0",
  "log",
  "naga",

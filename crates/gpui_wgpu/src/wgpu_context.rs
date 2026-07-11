@@ -81,6 +81,65 @@ impl WgpuContext {
         Self::new_with_options(instance, surface, compositor_gpu, true)
     }
 
+    #[cfg(all(
+        any(target_os = "linux", target_os = "freebsd"),
+        feature = "test-support"
+    ))]
+    pub fn new_headless() -> anyhow::Result<Self> {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::VULKAN | wgpu::Backends::GL,
+            flags: wgpu::InstanceFlags::default(),
+            backend_options: wgpu::BackendOptions::default(),
+            memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+            display: None,
+        });
+
+        let device_id_filter = match std::env::var("ZED_DEVICE_ID") {
+            Ok(val) => parse_pci_id(&val)
+                .context("Failed to parse device ID from `ZED_DEVICE_ID` environment variable")
+                .log_err(),
+            Err(std::env::VarError::NotPresent) => None,
+            err => {
+                err.context("Failed to read value of `ZED_DEVICE_ID` environment variable")
+                    .log_err();
+                None
+            }
+        };
+
+        let (adapter, device, queue, dual_source_blending, color_texture_format) = gpui::block_on(
+            Self::select_headless_adapter_and_device(&instance, device_id_filter),
+        )?;
+
+        let device_lost = Arc::new(AtomicBool::new(false));
+        device.set_device_lost_callback({
+            let device_lost = Arc::clone(&device_lost);
+            move |reason, message| {
+                log::error!("wgpu device lost: reason={reason:?}, message={message}");
+                if reason != wgpu::DeviceLostReason::Destroyed {
+                    device_lost.store(true, Ordering::Relaxed);
+                }
+            }
+        });
+
+        log::info!(
+            "Selected headless GPU adapter: {:?} ({:?})",
+            adapter.get_info().name,
+            adapter.get_info().backend
+        );
+
+        let backend = WgpuBackend::Native(adapter.get_info().backend);
+        Ok(Self {
+            instance,
+            adapter,
+            device: Arc::new(device),
+            queue: Arc::new(queue),
+            backend,
+            dual_source_blending,
+            color_texture_format,
+            device_lost,
+        })
+    }
+
     #[cfg(not(target_family = "wasm"))]
     fn new_with_options(
         instance: wgpu::Instance,
@@ -452,6 +511,107 @@ impl WgpuContext {
         }
 
         anyhow::bail!("No GPU adapter found that can configure the display surface")
+    }
+
+    #[cfg(all(
+        any(target_os = "linux", target_os = "freebsd"),
+        feature = "test-support"
+    ))]
+    async fn select_headless_adapter_and_device(
+        instance: &wgpu::Instance,
+        device_id_filter: Option<u32>,
+    ) -> anyhow::Result<(
+        wgpu::Adapter,
+        wgpu::Device,
+        wgpu::Queue,
+        bool,
+        TextureFormat,
+    )> {
+        let mut adapters: Vec<_> = instance.enumerate_adapters(wgpu::Backends::all()).await;
+
+        if adapters.is_empty() {
+            anyhow::bail!("No GPU adapters found");
+        }
+
+        if let Some(device_id) = device_id_filter {
+            log::info!("ZED_DEVICE_ID filter: {:#06x}", device_id);
+        }
+
+        adapters.sort_by_key(|adapter| {
+            let info = adapter.get_info();
+            let device_known = info.device != 0;
+
+            let user_override: u8 = match device_id_filter {
+                Some(id) if device_known && info.device == id => 0,
+                _ => 1,
+            };
+
+            let type_priority: u8 = match info.device_type {
+                wgpu::DeviceType::DiscreteGpu => 0,
+                wgpu::DeviceType::IntegratedGpu => 1,
+                wgpu::DeviceType::Other => 2,
+                wgpu::DeviceType::VirtualGpu => 3,
+                wgpu::DeviceType::Cpu => 4,
+            };
+
+            let backend_priority: u8 = match info.backend {
+                wgpu::Backend::Vulkan | wgpu::Backend::Metal | wgpu::Backend::Dx12 => 0,
+                _ => 1,
+            };
+
+            (user_override, type_priority, backend_priority)
+        });
+
+        log::info!("Found {} headless GPU adapter(s):", adapters.len());
+        for adapter in &adapters {
+            let info = adapter.get_info();
+            log::info!(
+                "  - {} (vendor={:#06x}, device={:#06x}, backend={:?}, type={:?})",
+                info.name,
+                info.vendor,
+                info.device,
+                info.backend,
+                info.device_type,
+            );
+        }
+
+        let mut last_error = None;
+        for adapter in adapters {
+            let info = adapter.get_info();
+            log::info!(
+                "Testing headless adapter: {} ({:?})...",
+                info.name,
+                info.backend
+            );
+
+            match Self::create_device(&adapter).await {
+                Ok((device, queue, dual_source_blending, color_atlas_texture_format)) => {
+                    log::info!("Selected headless GPU: {} ({:?})", info.name, info.backend);
+                    return Ok((
+                        adapter,
+                        device,
+                        queue,
+                        dual_source_blending,
+                        color_atlas_texture_format,
+                    ));
+                }
+                Err(error) => {
+                    log::info!(
+                        "  Headless adapter {} ({:?}) failed: {}, trying next...",
+                        info.name,
+                        info.backend,
+                        error
+                    );
+                    last_error = Some(error);
+                }
+            }
+        }
+
+        if let Some(error) = last_error {
+            anyhow::bail!("No headless GPU adapter could create a device: {error}");
+        }
+
+        anyhow::bail!("No headless GPU adapter could create a device")
     }
 
     /// Try to use an adapter with a surface by creating a device and testing configuration.

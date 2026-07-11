@@ -1942,6 +1942,13 @@ impl PlatformWindow for WaylandWindow {
         }
     }
 
+    #[cfg(feature = "test-support")]
+    fn render_to_image(&self, scene: &Scene) -> anyhow::Result<image::RgbaImage> {
+        let mut state = self.borrow_mut();
+        let size = state.bounds.size.to_device_pixels(state.scale);
+        state.renderer.render_scene_to_image(scene, size)
+    }
+
     fn schedule_frame(&self) {
         self.0.schedule_frame();
     }

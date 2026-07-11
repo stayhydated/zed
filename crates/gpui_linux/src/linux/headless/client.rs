@@ -141,3 +141,155 @@ impl LinuxClient for HeadlessClient {
         event_loop.run(None, &mut self.clone(), |_| {}).log_err();
     }
 }
+
+#[cfg(feature = "test-support")]
+pub struct LinuxHeadlessRenderer {
+    renderer: gpui_wgpu::WgpuHeadlessRenderer,
+}
+
+#[cfg(feature = "test-support")]
+impl LinuxHeadlessRenderer {
+    pub fn new() -> anyhow::Result<Self> {
+        Ok(Self {
+            renderer: gpui_wgpu::WgpuHeadlessRenderer::new()?,
+        })
+    }
+}
+
+#[cfg(feature = "test-support")]
+impl gpui::PlatformHeadlessRenderer for LinuxHeadlessRenderer {
+    fn render_scene_to_image(
+        &mut self,
+        scene: &gpui::Scene,
+        size: gpui::Size<gpui::DevicePixels>,
+    ) -> anyhow::Result<image::RgbaImage> {
+        self.renderer.render_scene_to_image(scene, size)
+    }
+
+    fn render_scene(
+        &mut self,
+        scene: &gpui::Scene,
+        size: gpui::Size<gpui::DevicePixels>,
+    ) -> anyhow::Result<()> {
+        self.renderer.render_scene(scene, size)
+    }
+
+    fn sprite_atlas(&self) -> std::sync::Arc<dyn gpui::PlatformAtlas> {
+        self.renderer.sprite_atlas()
+    }
+}
+
+#[cfg(all(test, feature = "test-support"))]
+mod tests {
+    use std::sync::Arc;
+
+    use gpui::{
+        AppContext as _, Context, HeadlessAppContext, IntoElement, NoopTextSystem, ParentElement,
+        Render, Styled, Window, div, px, rgb, size,
+    };
+
+    use super::LinuxHeadlessRenderer;
+
+    struct CaptureView;
+
+    impl Render for CaptureView {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(rgb(0x102030))
+                .child(
+                    div()
+                        .size(px(32.))
+                        .rounded_lg()
+                        .shadow_lg()
+                        .bg(rgb(0xff0000)),
+                )
+        }
+    }
+
+    fn capture_test_view() -> image::RgbaImage {
+        let mut cx = HeadlessAppContext::with_platform(
+            Arc::new(NoopTextSystem::new()),
+            Arc::new(()),
+            || {
+                LinuxHeadlessRenderer::new()
+                    .ok()
+                    .map(|renderer| Box::new(renderer) as Box<dyn gpui::PlatformHeadlessRenderer>)
+            },
+        );
+        let window = cx
+            .open_window(size(px(96.), px(64.)), |_, cx| cx.new(|_| CaptureView))
+            .expect("failed to open headless test window");
+        let window = window.into();
+
+        cx.update_window(window, |_, window, cx| {
+            let _ = window.draw(cx);
+        })
+        .expect("failed to draw headless test window");
+
+        let screenshot = cx
+            .capture_screenshot(window)
+            .expect("failed to capture headless screenshot");
+        assert!(screenshot.width() >= 96);
+        assert!(screenshot.height() >= 64);
+        assert!(
+            screenshot.pixels().any(|pixel| {
+                let [red, green, blue, alpha] = pixel.0;
+                red > 200 && green < 80 && blue < 80 && alpha > 200
+            }),
+            "expected at least one opaque red pixel in headless screenshot"
+        );
+
+        for capture_index in 1..=8 {
+            let repeated_screenshot = cx
+                .capture_screenshot(window)
+                .expect("failed to capture repeated headless screenshot");
+            assert_captures_equal(
+                &screenshot,
+                &repeated_screenshot,
+                &format!("capture {capture_index} within one renderer instance"),
+            );
+        }
+
+        screenshot
+    }
+
+    fn assert_captures_equal(
+        expected: &image::RgbaImage,
+        actual: &image::RgbaImage,
+        context: &str,
+    ) {
+        assert_eq!(
+            actual.dimensions(),
+            expected.dimensions(),
+            "{context}: capture dimensions differed"
+        );
+
+        let first_difference = expected
+            .pixels()
+            .zip(actual.pixels())
+            .enumerate()
+            .find(|(_, (expected, actual))| expected != actual);
+        assert!(
+            first_difference.is_none(),
+            "{context}: first differing pixel: {first_difference:?}"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires a working Vulkan or OpenGL adapter"]
+    fn captures_are_deterministic_for_selected_adapter() {
+        let screenshot = capture_test_view();
+        for renderer_index in 2..=5 {
+            let repeated_screenshot = capture_test_view();
+            assert_captures_equal(
+                &screenshot,
+                &repeated_screenshot,
+                &format!("renderer instance {renderer_index}"),
+            );
+        }
+    }
+}

@@ -14,6 +14,8 @@ mod x11;
 mod xdg_desktop_portal;
 
 pub use dispatcher::*;
+#[cfg(feature = "test-support")]
+pub use headless::LinuxHeadlessRenderer;
 pub(crate) use headless::*;
 pub(crate) use keyboard::*;
 pub(crate) use platform::*;

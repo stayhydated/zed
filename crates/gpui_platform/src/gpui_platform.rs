@@ -90,7 +90,18 @@ pub fn current_headless_renderer() -> Option<Box<dyn gpui::PlatformHeadlessRende
         ))
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    {
+        match gpui_linux::LinuxHeadlessRenderer::new() {
+            Ok(renderer) => Some(Box::new(renderer)),
+            Err(error) => {
+                log::warn!("failed to initialize Linux headless renderer: {error:#}");
+                None
+            }
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
     {
         None
     }

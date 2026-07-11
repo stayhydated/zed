@@ -161,6 +161,15 @@ struct WgpuBindGroupLayouts {
     surfaces: wgpu::BindGroupLayout,
 }
 
+#[cfg(all(
+    any(target_os = "linux", target_os = "freebsd"),
+    feature = "test-support"
+))]
+struct HeadlessRenderTarget {
+    texture: wgpu::Texture,
+    view: wgpu::TextureView,
+}
+
 /// Shared GPU context reference, used to coordinate device recovery across multiple windows.
 pub type GpuContext = Rc<RefCell<Option<WgpuContext>>>;
 
@@ -180,7 +189,7 @@ enum InstanceData {
 struct WgpuResources {
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
-    surface: wgpu::Surface<'static>,
+    surface: Option<wgpu::Surface<'static>>,
     pipelines: WgpuPipelines,
     bind_group_layouts: WgpuBindGroupLayouts,
     atlas_sampler: wgpu::Sampler,
@@ -192,6 +201,11 @@ struct WgpuResources {
     path_intermediate_view: Option<wgpu::TextureView>,
     path_msaa_texture: Option<wgpu::Texture>,
     path_msaa_view: Option<wgpu::TextureView>,
+    #[cfg(all(
+        any(target_os = "linux", target_os = "freebsd"),
+        feature = "test-support"
+    ))]
+    headless_render_target: Option<HeadlessRenderTarget>,
 }
 
 impl WgpuResources {
@@ -200,6 +214,16 @@ impl WgpuResources {
         self.path_intermediate_view = None;
         self.path_msaa_texture = None;
         self.path_msaa_view = None;
+    }
+
+    #[cfg(all(
+        any(target_os = "linux", target_os = "freebsd"),
+        feature = "test-support"
+    ))]
+    fn invalidate_headless_render_target(&mut self) {
+        if let Some(target) = self.headless_render_target.take() {
+            target.texture.destroy();
+        }
     }
 }
 
@@ -389,15 +413,106 @@ impl WgpuRenderer {
             wgpu::CompositeAlphaMode::Inherit,
         ])?;
 
+        let present_mode = config
+            .preferred_present_mode
+            .filter(|mode| surface_caps.present_modes.contains(mode))
+            .unwrap_or(wgpu::PresentMode::Fifo);
+        let surface_config = Self::surface_config_for(
+            context,
+            config,
+            surface_format,
+            transparent_alpha_mode,
+            opaque_alpha_mode,
+            present_mode,
+        );
+        // Configure the surface immediately. The adapter selection process already validated
+        // that this adapter can successfully configure this surface.
+        surface.configure(&context.device, &surface_config);
+
+        Self::new_with_format(
+            gpu_context,
+            context,
+            Some(surface),
+            surface_config,
+            transparent_alpha_mode,
+            opaque_alpha_mode,
+            compositor_gpu,
+            atlas,
+        )
+    }
+
+    #[cfg(all(
+        any(target_os = "linux", target_os = "freebsd"),
+        feature = "test-support"
+    ))]
+    pub fn new_headless(config: WgpuSurfaceConfig) -> anyhow::Result<Self> {
+        let context = WgpuContext::new_headless()?;
+        let surface_format = Self::select_offscreen_format(&context.adapter)?;
+        let present_mode = config
+            .preferred_present_mode
+            .unwrap_or(wgpu::PresentMode::Fifo);
+        let surface_config = Self::surface_config_for(
+            &context,
+            config,
+            surface_format,
+            wgpu::CompositeAlphaMode::PreMultiplied,
+            wgpu::CompositeAlphaMode::Opaque,
+            present_mode,
+        );
+        let atlas = Arc::new(WgpuAtlas::from_context(&context));
+
+        Self::new_with_format(
+            None,
+            &context,
+            None,
+            surface_config,
+            wgpu::CompositeAlphaMode::PreMultiplied,
+            wgpu::CompositeAlphaMode::Opaque,
+            None,
+            atlas,
+        )
+    }
+
+    #[cfg(all(
+        any(target_os = "linux", target_os = "freebsd"),
+        feature = "test-support"
+    ))]
+    fn select_offscreen_format(adapter: &wgpu::Adapter) -> anyhow::Result<wgpu::TextureFormat> {
+        let required_usages =
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC;
+        for format in [
+            wgpu::TextureFormat::Rgba8Unorm,
+            wgpu::TextureFormat::Bgra8Unorm,
+        ] {
+            let features = adapter.get_texture_format_features(format);
+            if features.allowed_usages.contains(required_usages) {
+                return Ok(format);
+            }
+        }
+
+        let info = adapter.get_info();
+        anyhow::bail!(
+            "Adapter {} ({:?}) does not support Rgba8Unorm or Bgra8Unorm for offscreen rendering",
+            info.name,
+            info.backend,
+        )
+    }
+
+    fn surface_config_for(
+        context: &WgpuContext,
+        config: WgpuSurfaceConfig,
+        surface_format: wgpu::TextureFormat,
+        transparent_alpha_mode: wgpu::CompositeAlphaMode,
+        opaque_alpha_mode: wgpu::CompositeAlphaMode,
+        present_mode: wgpu::PresentMode,
+    ) -> wgpu::SurfaceConfiguration {
         let alpha_mode = if config.transparent {
             transparent_alpha_mode
         } else {
             opaque_alpha_mode
         };
 
-        let device = Arc::clone(&context.device);
-        let max_texture_size = device.limits().max_texture_dimension_2d;
-
+        let max_texture_size = context.device.limits().max_texture_dimension_2d;
         let requested_width = config.size.width.0 as u32;
         let requested_height = config.size.height.0 as u32;
         let clamped_width = requested_width.min(max_texture_size);
@@ -411,25 +526,32 @@ impl WgpuRenderer {
             );
         }
 
-        let surface_config = wgpu::SurfaceConfiguration {
+        wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
             width: clamped_width.max(1),
             height: clamped_height.max(1),
-            present_mode: config
-                .preferred_present_mode
-                .filter(|mode| surface_caps.present_modes.contains(mode))
-                .unwrap_or(wgpu::PresentMode::Fifo),
+            present_mode,
             desired_maximum_frame_latency: 2,
             alpha_mode,
             view_formats: vec![],
-        };
-        // Configure the surface immediately. The adapter selection process already validated
-        // that this adapter can successfully configure this surface.
-        surface.configure(&context.device, &surface_config);
+        }
+    }
 
+    fn new_with_format(
+        gpu_context: Option<GpuContext>,
+        context: &WgpuContext,
+        surface: Option<wgpu::Surface<'static>>,
+        surface_config: wgpu::SurfaceConfiguration,
+        transparent_alpha_mode: wgpu::CompositeAlphaMode,
+        opaque_alpha_mode: wgpu::CompositeAlphaMode,
+        compositor_gpu: Option<CompositorGpuHint>,
+        atlas: Arc<WgpuAtlas>,
+    ) -> anyhow::Result<Self> {
+        let device = Arc::clone(&context.device);
         let queue = Arc::clone(&context.queue);
-        let rendering_params = RenderingParameters::new(&context.adapter, surface_format);
+        let max_texture_size = device.limits().max_texture_dimension_2d;
+        let rendering_params = RenderingParameters::new(&context.adapter, surface_config.format);
         let uses_webgl_instance_data = context.uses_webgl_instance_data();
         let dual_source_blending =
             context.supports_dual_source_blending() && !uses_webgl_instance_data;
@@ -437,8 +559,8 @@ impl WgpuRenderer {
         let pipelines = Self::create_pipelines(
             &device,
             &bind_group_layouts,
-            surface_format,
-            alpha_mode,
+            surface_config.format,
+            surface_config.alpha_mode,
             rendering_params.path_sample_count,
             dual_source_blending,
             uses_webgl_instance_data,
@@ -561,6 +683,7 @@ impl WgpuRenderer {
             *guard = Some(error.to_string());
         }));
 
+        let surface_configured = surface.is_some();
         let resources = WgpuResources {
             device,
             queue,
@@ -578,6 +701,11 @@ impl WgpuRenderer {
             path_intermediate_view: None,
             path_msaa_texture: None,
             path_msaa_view: None,
+            #[cfg(all(
+                any(target_os = "linux", target_os = "freebsd"),
+                feature = "test-support"
+            ))]
+            headless_render_target: None,
         };
 
         Ok(Self {
@@ -602,7 +730,7 @@ impl WgpuRenderer {
             last_error,
             failed_frame_count: 0,
             device_lost: context.device_lost_flag(),
-            surface_configured: true,
+            surface_configured,
             needs_redraw: false,
         })
     }
@@ -1158,16 +1286,58 @@ impl WgpuRenderer {
             if let Some(ref texture) = resources.path_msaa_texture {
                 texture.destroy();
             }
+            #[cfg(all(
+                any(target_os = "linux", target_os = "freebsd"),
+                feature = "test-support"
+            ))]
+            resources.invalidate_headless_render_target();
 
-            resources
-                .surface
-                .configure(&resources.device, &surface_config);
+            if let Some(surface) = resources.surface.as_ref() {
+                surface.configure(&resources.device, &surface_config);
+            }
 
             // Invalidate intermediate textures - they will be lazily recreated
             // in draw() after we confirm the surface is healthy. This avoids
             // panics when the device/surface is in an invalid state during resize.
             resources.invalidate_intermediate_textures();
         }
+    }
+
+    #[cfg(all(
+        any(target_os = "linux", target_os = "freebsd"),
+        feature = "test-support"
+    ))]
+    fn headless_render_target_view(&mut self) -> wgpu::TextureView {
+        let format = self.surface_config.format;
+        let width = self.surface_config.width;
+        let height = self.surface_config.height;
+        let resources = self.resources_mut();
+
+        if resources.headless_render_target.is_none() {
+            let texture = resources.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("headless_present_texture"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            resources.headless_render_target = Some(HeadlessRenderTarget { texture, view });
+        }
+
+        resources
+            .headless_render_target
+            .as_ref()
+            .expect("headless render target was just initialized")
+            .view
+            .clone()
     }
 
     fn ensure_intermediate_textures(&mut self) {
@@ -1218,9 +1388,9 @@ impl WgpuRenderer {
             let Some(resources) = self.resources.as_mut() else {
                 return;
             };
-            resources
-                .surface
-                .configure(&resources.device, &surface_config);
+            if let Some(surface) = resources.surface.as_ref() {
+                surface.configure(&resources.device, &surface_config);
+            }
             resources.pipelines = Self::create_pipelines(
                 &resources.device,
                 &resources.bind_group_layouts,
@@ -1282,50 +1452,32 @@ impl WgpuRenderer {
             return false;
         }
 
-        let last_error = self.last_error.lock().unwrap().take();
-        if let Some(error) = last_error {
-            self.failed_frame_count += 1;
-            log::error!(
-                "GPU error during frame (failure {} of 10): {error}",
-                self.failed_frame_count
-            );
-
-            // TBD. Does retrying more actually help?
-            if self.failed_frame_count > 10 {
-                panic!("Too many consecutive GPU errors. Last error: {error}");
-            } else if self.failed_frame_count > 5 {
-                if let Some(res) = self.resources.as_mut() {
-                    res.invalidate_intermediate_textures();
-                }
-                self.atlas.clear();
-                self.needs_redraw = true;
-                self.failed_frame_count = 0;
+        let surface_texture = {
+            let resources = self.resources();
+            let Some(surface) = resources.surface.as_ref() else {
                 return false;
-            }
-        } else {
-            self.failed_frame_count = 0;
-        }
+            };
+            surface.get_current_texture()
+        };
 
-        self.atlas.before_frame();
-
-        let frame = match self.resources().surface.get_current_texture() {
+        let frame = match surface_texture {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
             wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
                 // Textures must be destroyed before the surface can be reconfigured.
                 drop(frame);
                 let surface_config = self.surface_config.clone();
                 let resources = self.resources_mut();
-                resources
-                    .surface
-                    .configure(&resources.device, &surface_config);
+                if let Some(surface) = resources.surface.as_ref() {
+                    surface.configure(&resources.device, &surface_config);
+                }
                 return false;
             }
             wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Outdated => {
                 let surface_config = self.surface_config.clone();
                 let resources = self.resources_mut();
-                resources
-                    .surface
-                    .configure(&resources.device, &surface_config);
+                if let Some(surface) = resources.surface.as_ref() {
+                    surface.configure(&resources.device, &surface_config);
+                }
                 return false;
             }
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
@@ -1338,58 +1490,159 @@ impl WgpuRenderer {
             }
         };
 
-        // Now that we know the surface is healthy, ensure intermediate textures exist
-        self.ensure_intermediate_textures();
-
         let frame_view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let gamma_params = GammaParams {
-            gamma_ratios: self.rendering_params.gamma_ratios,
-            grayscale_enhanced_contrast: self.rendering_params.grayscale_enhanced_contrast,
-            subpixel_enhanced_contrast: self.rendering_params.subpixel_enhanced_contrast,
-            is_bgr: self.is_bgr as u32,
-            _pad: 0,
-        };
+        let ok = self.draw_to_view(scene, &frame_view);
+        frame.present();
+        ok
+    }
 
-        let globals = GlobalParams {
-            viewport_size: [
-                self.surface_config.width as f32,
-                self.surface_config.height as f32,
-            ],
-            premultiplied_alpha: if self.surface_config.alpha_mode
-                == wgpu::CompositeAlphaMode::PreMultiplied
-            {
-                1
-            } else {
-                0
-            },
-            pad: 0,
-        };
+    #[cfg(all(not(target_family = "wasm"), feature = "test-support"))]
+    pub fn render_scene_to_image(
+        &mut self,
+        scene: &Scene,
+        size: Size<DevicePixels>,
+    ) -> anyhow::Result<image::RgbaImage> {
+        if size.width.0 <= 0 || size.height.0 <= 0 {
+            anyhow::bail!("invalid headless render size: {:?}", size);
+        }
 
-        let path_globals = GlobalParams {
-            premultiplied_alpha: 0,
-            ..globals
-        };
+        self.update_drawable_size(size);
 
-        {
+        let width = self.surface_config.width;
+        let height = self.surface_config.height;
+        let format = self.surface_config.format;
+        let (device, queue) = {
             let resources = self.resources();
-            resources.queue.write_buffer(
-                &resources.globals_buffer,
-                0,
-                bytemuck::bytes_of(&globals),
-            );
-            resources.queue.write_buffer(
-                &resources.globals_buffer,
-                self.path_globals_offset,
-                bytemuck::bytes_of(&path_globals),
-            );
-            resources.queue.write_buffer(
-                &resources.globals_buffer,
-                self.gamma_offset,
-                bytemuck::bytes_of(&gamma_params),
-            );
+            (Arc::clone(&resources.device), Arc::clone(&resources.queue))
+        };
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("headless_render_texture"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        anyhow::ensure!(
+            self.draw_to_view(scene, &texture_view),
+            "failed to render scene to offscreen texture"
+        );
+
+        let bytes_per_pixel = 4;
+        let unpadded_bytes_per_row = width * bytes_per_pixel;
+        let padded_bytes_per_row =
+            unpadded_bytes_per_row.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+        let output_buffer_size = padded_bytes_per_row as u64 * height as u64;
+        let output_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("headless_readback_buffer"),
+            size: output_buffer_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("headless_readback_encoder"),
+        });
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &output_buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bytes_per_row),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        let buffer_slice = output_buffer.slice(..);
+        let (tx, rx) = std::sync::mpsc::channel();
+        encoder.map_buffer_on_submit(&output_buffer, wgpu::MapMode::Read, .., move |result| {
+            if tx.send(result).is_err() {
+                log::error!("headless readback receiver was dropped before mapping completed");
+            }
+        });
+        queue.submit(std::iter::once(encoder.finish()));
+
+        device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .map_err(|err| {
+                anyhow::anyhow!("failed to poll device for headless readback: {err:?}")
+            })?;
+
+        match rx
+            .recv()
+            .map_err(|_| anyhow::anyhow!("headless readback map callback was dropped"))?
+        {
+            Ok(()) => {}
+            Err(err) => anyhow::bail!("failed to map headless readback buffer: {err}"),
+        }
+
+        let mapped = buffer_slice.get_mapped_range();
+        let mut pixels = vec![0; (width * height * bytes_per_pixel) as usize];
+        let row_bytes = unpadded_bytes_per_row as usize;
+        let padded_row_bytes = padded_bytes_per_row as usize;
+        for y in 0..height as usize {
+            let src_start = y * padded_row_bytes;
+            let dst_start = y * row_bytes;
+            pixels[dst_start..dst_start + row_bytes]
+                .copy_from_slice(&mapped[src_start..src_start + row_bytes]);
+        }
+        drop(mapped);
+        output_buffer.unmap();
+
+        if format == wgpu::TextureFormat::Bgra8Unorm {
+            for pixel in pixels.chunks_exact_mut(4) {
+                pixel.swap(0, 2);
+            }
+        }
+
+        image::RgbaImage::from_raw(width, height, pixels)
+            .ok_or_else(|| anyhow::anyhow!("failed to create headless render image"))
+    }
+
+    #[cfg(all(
+        any(target_os = "linux", target_os = "freebsd"),
+        feature = "test-support"
+    ))]
+    pub fn render_scene(&mut self, scene: &Scene, size: Size<DevicePixels>) -> anyhow::Result<()> {
+        if size.width.0 <= 0 || size.height.0 <= 0 {
+            anyhow::bail!("invalid headless render size: {:?}", size);
+        }
+
+        self.update_drawable_size(size);
+        let texture_view = self.headless_render_target_view();
+        anyhow::ensure!(
+            self.draw_to_view(scene, &texture_view),
+            "failed to render scene to offscreen texture"
+        );
+        Ok(())
+    }
+
+    fn draw_to_view(&mut self, scene: &Scene, frame_view: &wgpu::TextureView) -> bool {
+        if !self.prepare_frame() {
+            return false;
         }
 
         if let Err(error) = self.record_frame(scene, &frame_view) {
@@ -1398,7 +1651,6 @@ impl WgpuRenderer {
             return false;
         }
 
-        frame.present();
         true
     }
 
@@ -1537,6 +1789,86 @@ impl WgpuRenderer {
             .queue
             .submit(std::iter::once(encoder.finish()));
         Ok(())
+    }
+
+    fn prepare_frame(&mut self) -> bool {
+        let last_error = self.last_error.lock().unwrap().take();
+        if let Some(error) = last_error {
+            self.failed_frame_count += 1;
+            log::error!(
+                "GPU error during frame (failure {} of 10): {error}",
+                self.failed_frame_count
+            );
+
+            // TBD. Does retrying more actually help?
+            if self.failed_frame_count > 10 {
+                panic!("Too many consecutive GPU errors. Last error: {error}");
+            } else if self.failed_frame_count > 5 {
+                if let Some(res) = self.resources.as_mut() {
+                    res.invalidate_intermediate_textures();
+                }
+                self.atlas.clear();
+                self.needs_redraw = true;
+                self.failed_frame_count = 0;
+                return false;
+            }
+        } else {
+            self.failed_frame_count = 0;
+        }
+
+        self.atlas.before_frame();
+
+        // Now that we know the render target is available, ensure intermediate textures exist.
+        self.ensure_intermediate_textures();
+
+        let gamma_params = GammaParams {
+            gamma_ratios: self.rendering_params.gamma_ratios,
+            grayscale_enhanced_contrast: self.rendering_params.grayscale_enhanced_contrast,
+            subpixel_enhanced_contrast: self.rendering_params.subpixel_enhanced_contrast,
+            is_bgr: self.is_bgr as u32,
+            _pad: 0,
+        };
+
+        let globals = GlobalParams {
+            viewport_size: [
+                self.surface_config.width as f32,
+                self.surface_config.height as f32,
+            ],
+            premultiplied_alpha: if self.surface_config.alpha_mode
+                == wgpu::CompositeAlphaMode::PreMultiplied
+            {
+                1
+            } else {
+                0
+            },
+            pad: 0,
+        };
+
+        let path_globals = GlobalParams {
+            premultiplied_alpha: 0,
+            ..globals
+        };
+
+        {
+            let resources = self.resources();
+            resources.queue.write_buffer(
+                &resources.globals_buffer,
+                0,
+                bytemuck::bytes_of(&globals),
+            );
+            resources.queue.write_buffer(
+                &resources.globals_buffer,
+                self.path_globals_offset,
+                bytemuck::bytes_of(&path_globals),
+            );
+            resources.queue.write_buffer(
+                &resources.globals_buffer,
+                self.gamma_offset,
+                bytemuck::bytes_of(&gamma_params),
+            );
+        }
+
+        true
     }
 
     fn write_instances(
@@ -2027,7 +2359,7 @@ impl WgpuRenderer {
                 .as_mut()
                 .expect("GPU resources not available");
             surface.configure(&res.device, &self.surface_config);
-            res.surface = surface;
+            res.surface = Some(surface);
 
             // Invalidate intermediate textures — they'll be recreated lazily.
             res.invalidate_intermediate_textures();
@@ -2135,6 +2467,49 @@ impl WgpuRenderer {
 
 fn instance_range(range: Range<usize>) -> Range<u32> {
     range.start as u32..range.end as u32
+}
+
+#[cfg(all(
+    any(target_os = "linux", target_os = "freebsd"),
+    feature = "test-support"
+))]
+pub struct WgpuHeadlessRenderer {
+    renderer: WgpuRenderer,
+}
+
+#[cfg(all(
+    any(target_os = "linux", target_os = "freebsd"),
+    feature = "test-support"
+))]
+impl WgpuHeadlessRenderer {
+    pub fn new() -> anyhow::Result<Self> {
+        let renderer = WgpuRenderer::new_headless(WgpuSurfaceConfig {
+            size: Size {
+                width: DevicePixels(1),
+                height: DevicePixels(1),
+            },
+            transparent: true,
+            preferred_present_mode: None,
+        })?;
+
+        Ok(Self { renderer })
+    }
+
+    pub fn render_scene_to_image(
+        &mut self,
+        scene: &Scene,
+        size: Size<DevicePixels>,
+    ) -> anyhow::Result<image::RgbaImage> {
+        self.renderer.render_scene_to_image(scene, size)
+    }
+
+    pub fn render_scene(&mut self, scene: &Scene, size: Size<DevicePixels>) -> anyhow::Result<()> {
+        self.renderer.render_scene(scene, size)
+    }
+
+    pub fn sprite_atlas(&self) -> Arc<dyn gpui::PlatformAtlas> {
+        self.renderer.sprite_atlas().clone()
+    }
 }
 
 #[cfg(not(target_family = "wasm"))]
