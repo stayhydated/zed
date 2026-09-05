@@ -7476,7 +7476,7 @@ dependencies = [
 
 [[package]]
 name = "gpui"
-version = "0.2.2"
+version = "0.3.3"
 dependencies = [
  "accesskit",
  "anyhow",
