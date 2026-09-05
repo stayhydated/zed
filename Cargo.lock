@@ -2123,7 +2123,7 @@ dependencies = [
  "editor",
  "futures 0.3.32",
  "gpui-pre",
- "gpui_platform",
+ "gpui-pre-platform",
  "indoc",
  "itertools 0.14.0",
  "language",
@@ -3596,7 +3596,7 @@ dependencies = [
  "env_logger 0.11.8",
  "fs",
  "gpui-pre",
- "gpui_platform",
+ "gpui-pre-platform",
  "language",
  "log",
  "node_runtime",
@@ -5425,7 +5425,7 @@ dependencies = [
  "futures 0.3.32",
  "gaoya",
  "gpui-pre",
- "gpui_platform",
+ "gpui-pre-platform",
  "gpui_tokio",
  "http_client",
  "indoc",
@@ -5650,7 +5650,7 @@ dependencies = [
  "anyhow",
  "editor",
  "gpui-pre",
- "gpui_platform",
+ "gpui-pre-platform",
  "language",
  "multi_buffer",
  "project",
@@ -6010,7 +6010,7 @@ dependencies = [
  "fs",
  "futures 0.3.32",
  "gpui-pre",
- "gpui_platform",
+ "gpui-pre-platform",
  "gpui_tokio",
  "language",
  "language_extension",
@@ -6038,7 +6038,7 @@ dependencies = [
 name = "eval_utils"
 version = "0.1.0"
 dependencies = [
- "gpui_platform",
+ "gpui-pre-platform",
  "smol",
 ]
 
@@ -6157,7 +6157,7 @@ dependencies = [
  "extension",
  "fs",
  "futures 0.3.32",
- "gpui_platform",
+ "gpui-pre-platform",
  "http_client",
  "language",
  "log",
@@ -6734,7 +6734,7 @@ version = "0.1.0"
 dependencies = [
  "fs",
  "gpui-pre",
- "gpui_platform",
+ "gpui-pre-platform",
 ]
 
 [[package]]
@@ -7497,8 +7497,8 @@ dependencies = [
  "futures 0.3.32",
  "futures-concurrency",
  "getrandom 0.3.4",
+ "gpui-pre-platform",
  "gpui_macros",
- "gpui_platform",
  "gpui_shared_string",
  "gpui_util",
  "hdrhistogram",
@@ -7553,6 +7553,42 @@ dependencies = [
  "zed-font-kit",
  "zed-scap",
  "ztracing",
+]
+
+[[package]]
+name = "gpui-pre-platform"
+version = "0.3.3"
+dependencies = [
+ "console_error_panic_hook",
+ "gpui-pre",
+ "gpui-pre-web",
+ "gpui_linux",
+ "gpui_macos",
+ "gpui_windows",
+ "log",
+]
+
+[[package]]
+name = "gpui-pre-web"
+version = "0.3.3"
+dependencies = [
+ "anyhow",
+ "console_error_panic_hook",
+ "futures 0.3.32",
+ "gpui-pre",
+ "gpui_wgpu",
+ "http_client",
+ "js-sys",
+ "log",
+ "parking_lot",
+ "raw-window-handle",
+ "scheduler",
+ "uuid",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm_thread",
+ "web-sys",
+ "web-time",
 ]
 
 [[package]]
@@ -7680,19 +7716,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui_platform"
-version = "0.1.0"
-dependencies = [
- "console_error_panic_hook",
- "gpui-pre",
- "gpui_linux",
- "gpui_macos",
- "gpui_web",
- "gpui_windows",
- "log",
-]
-
-[[package]]
 name = "gpui_shared_string"
 version = "0.1.0"
 dependencies = [
@@ -7718,29 +7741,6 @@ dependencies = [
  "anyhow",
  "log",
  "which",
-]
-
-[[package]]
-name = "gpui_web"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "console_error_panic_hook",
- "futures 0.3.32",
- "gpui-pre",
- "gpui_wgpu",
- "http_client",
- "js-sys",
- "log",
- "parking_lot",
- "raw-window-handle",
- "scheduler",
- "uuid",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "wasm_thread",
- "web-sys",
- "web-time",
 ]
 
 [[package]]
@@ -10176,7 +10176,7 @@ dependencies = [
  "cpal",
  "futures 0.3.32",
  "gpui-pre",
- "gpui_platform",
+ "gpui-pre-platform",
  "gpui_tokio",
  "http_client_tls",
  "image",
@@ -10573,7 +10573,7 @@ dependencies = [
  "env_logger 0.11.8",
  "fs",
  "gpui-pre",
- "gpui_platform",
+ "gpui-pre-platform",
  "html5ever",
  "image",
  "indoc",
@@ -13957,7 +13957,7 @@ dependencies = [
  "client",
  "futures 0.3.32",
  "gpui-pre",
- "gpui_platform",
+ "gpui-pre-platform",
  "http_client",
  "language",
  "node_runtime",
@@ -15050,7 +15050,7 @@ dependencies = [
  "git",
  "git_hosting_providers",
  "gpui-pre",
- "gpui_platform",
+ "gpui-pre-platform",
  "gpui_tokio",
  "http_client",
  "image",
@@ -22328,7 +22328,7 @@ name = "worktree_benchmarks"
 version = "0.1.0"
 dependencies = [
  "fs",
- "gpui_platform",
+ "gpui-pre-platform",
  "settings",
  "worktree",
 ]
@@ -22792,7 +22792,7 @@ dependencies = [
  "git_ui_core",
  "go_to_line",
  "gpui-pre",
- "gpui_platform",
+ "gpui-pre-platform",
  "gpui_tokio",
  "http_client",
  "image",
