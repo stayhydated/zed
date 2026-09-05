@@ -1,5 +1,5 @@
 [package]
-name = "gpui"
+name = "gpui-pre"
 version = "0.3.3"
 edition.workspace = true
 authors = ["Nathan Sobo <nathan@zed.dev>"]
@@ -43,6 +43,7 @@ profiler = ["dep:hdrhistogram"]
 stacker = ["dep:stacksafe"]
 
 [lib]
+name = "gpui"
 path = "src/gpui.rs"
 doctest = false
 
