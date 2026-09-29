@@ -1,0 +1,70 @@
+# Dependency names and versions follow the published gpui-pre 0.3.7 manifests.
+[package]
+name = "gpui-pre-platform"
+version = "0.3.7"
+edition = "2024"
+publish = false
+license = "Apache-2.0"
+description = "Zed platform backend for gpui-pre 0.3.7 with Wayland image capture"
+
+[package.metadata.gpui-pre]
+zed-crate = "gpui_platform"
+# Published dependencies originate from this snapshot; library sources use this branch.
+dependency-snapshot-rev = "1a28cff4b409169bac058bca40dfbfeb7621d19b"
+
+[lib]
+name = "gpui_platform"
+path = "../../crates/gpui_platform/src/gpui_platform.rs"
+doctest = false
+
+[features]
+default = []
+bench-support = [
+  "gpui/bench-support",
+  "gpui_macos/bench-support",
+  "gpui_wgpu/bench-support",
+]
+font-kit = ["gpui_macos/font-kit"]
+inspector = ["gpui/inspector"]
+test-support = [
+  "gpui/test-support",
+  "gpui_macos/test-support",
+  "gpui_windows/test-support",
+  "gpui_linux/test-support",
+  "gpui_wgpu/test-support",
+]
+screen-capture = [
+  "gpui/screen-capture",
+  "gpui_macos/screen-capture",
+  "gpui_windows/screen-capture",
+  "gpui_linux/screen-capture",
+]
+runtime_shaders = ["gpui_macos/runtime_shaders"]
+wayland = ["gpui_linux/wayland"]
+x11 = ["gpui_linux/x11"]
+
+[dependencies]
+anyhow = { version = "1.0.86" }
+gpui = { version = "=0.3.7", default-features = false, package = "gpui-pre" }
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+gpui_linux = { version = "=0.3.7", default-features = false, package = "gpui-pre-linux", path = "../linux" }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+console_error_panic_hook = { version = "0.1.7" }
+gpui_web = { version = "=0.3.7", package = "gpui-pre-web" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gpui_wgpu = { version = "=0.3.7", optional = true, package = "gpui-pre-wgpu", path = "../wgpu" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui_macos = { version = "=0.3.7", default-features = false, package = "gpui-pre-macos" }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+gpui = { version = "=0.3.7", features = [
+  "windows-manifest",
+], default-features = false, package = "gpui-pre" }
+gpui_windows = { version = "=0.3.7", default-features = false, package = "gpui-pre-windows" }
+
+[lints]
+workspace = true

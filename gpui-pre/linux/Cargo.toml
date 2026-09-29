@@ -1,0 +1,131 @@
+# Dependency names and versions follow the published gpui-pre 0.3.7 manifests.
+[package]
+name = "gpui-pre-linux"
+version = "0.3.7"
+edition = "2024"
+publish = false
+license = "Apache-2.0"
+description = "Zed linux backend for gpui-pre 0.3.7 with Wayland image capture"
+
+[package.metadata.gpui-pre]
+zed-crate = "gpui_linux"
+# Published dependencies originate from this snapshot; library sources use this branch.
+dependency-snapshot-rev = "1a28cff4b409169bac058bca40dfbfeb7621d19b"
+
+[lib]
+name = "gpui_linux"
+path = "../../crates/gpui_linux/src/gpui_linux.rs"
+doctest = false
+
+[features]
+default = ["wayland", "x11"]
+test-support = ["gpui/test-support", "gpui_wgpu?/test-support", "dep:image"]
+wayland = [
+  "bitflags",
+  "gpui_wgpu",
+  "ashpd/wayland",
+  "calloop-wayland-source",
+  "wayland-backend",
+  "wayland-client",
+  "wayland-cursor",
+  "wayland-protocols",
+  "wayland-protocols-plasma",
+  "wayland-protocols-wlr",
+  "filedescriptor",
+  "xkbcommon/wayland",
+  "open",
+  "gpui/wayland",
+]
+x11 = [
+  "gpui_wgpu",
+  "ashpd",
+  "as-raw-xcb-connection",
+  "x11rb",
+  "xkbcommon/x11",
+  "xim",
+  "filedescriptor",
+  "open",
+  "scap?/x11",
+]
+screen-capture = ["gpui/screen-capture", "scap"]
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+accesskit = { version = "0.24.0", features = ["enumn"] }
+accesskit_unix = { version = "0.22" }
+anyhow = { version = "1.0.86" }
+as-raw-xcb-connection = { version = "1", optional = true }
+ashpd = { version = "0.13", features = [
+  "async-io",
+  "inhibit",
+  "notification",
+  "open_uri",
+  "file_chooser",
+  "settings",
+  "trash",
+], optional = true, default-features = false }
+bitflags = { version = "2.6.0", optional = true }
+bytemuck = { version = "1" }
+calloop = { version = "0.14.3" }
+calloop-wayland-source = { version = "0.4.1", optional = true }
+collections = { version = "=0.3.7", package = "gpui-pre-collections" }
+filedescriptor = { version = "0.8.2", optional = true }
+futures = { version = "0.3.34" }
+gpui = { version = "=0.3.7", default-features = false, package = "gpui-pre" }
+gpui_util = { version = "=0.3.7", package = "gpui-pre-util" }
+gpui_wgpu = { version = "=0.3.7", features = [
+  "font-kit",
+], optional = true, package = "gpui-pre-wgpu", path = "../wgpu" }
+http_client = { version = "=0.3.7", package = "gpui-pre-http-client" }
+libc = { version = "0.2" }
+log = { version = "0.4.16", features = ["kv_unstable_serde", "serde"] }
+notify-rust = { version = "4" }
+oo7 = { version = "0.6", features = [
+  "async-std",
+  "native_crypto",
+], default-features = false }
+open = { version = "5.2.0", optional = true }
+parking_lot = { version = "0.12.1" }
+raw-window-handle = { version = "0.6" }
+scap = { version = "0.0.8-zed", optional = true, default-features = false, package = "zed-scap" }
+smallvec = { version = "1.6", features = ["union", "const_new"] }
+smol = { version = "2.0" }
+strum = { version = "0.28", features = ["derive"] }
+url = { version = "2.2" }
+uuid = { version = "1.1.2", features = ["v4", "v5", "v7", "serde"] }
+wayland-backend = { version = "0.3.15", features = [
+  "client_system",
+  "dlopen",
+  "log",
+], optional = true }
+wayland-client = { version = "0.31.11", optional = true }
+wayland-cursor = { version = "0.31.11", optional = true }
+wayland-protocols = { version = "0.32.9", features = [
+  "client",
+  "staging",
+  "unstable",
+], optional = true }
+wayland-protocols-plasma = { version = "0.3.9", features = [
+  "client",
+], optional = true }
+wayland-protocols-wlr = { version = "0.3.9", features = [
+  "client",
+], optional = true }
+x11rb = { version = "0.13.1", features = [
+  "allow-unsafe-code",
+  "xkb",
+  "randr",
+  "xinput",
+  "cursor",
+  "resource_manager",
+  "sync",
+  "dri3",
+], optional = true }
+xim = { version = "0.4.0-zed", features = [
+  "x11rb-xcb",
+  "x11rb-client",
+], optional = true, package = "zed-xim" }
+xkbcommon = { version = "0.8.0", optional = true, default-features = false }
+image = { version = "0.25.1", optional = true, default-features = false }
+
+[lints]
+workspace = true
