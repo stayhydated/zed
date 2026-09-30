@@ -1973,6 +1973,11 @@ impl PlatformWindow for X11Window {
         let _ = self.0.xcb.bell(0);
     }
 
+    #[cfg(feature = "test-support")]
+    fn render_to_image(&self, scene: &Scene) -> anyhow::Result<image::RgbaImage> {
+        self.0.state.borrow_mut().renderer.render_to_image(scene)
+    }
+
     fn a11y_init(&self, callbacks: gpui::A11yCallbacks) {
         let activation_handler = TrivialActivationHandler {
             callback: callbacks.activation,
