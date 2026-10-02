@@ -2,6 +2,7 @@
 name = "oauth_callback_server"
 version = "0.1.0"
 edition.workspace = true
+rust-version.workspace = true
 publish = false
 license = "Apache-2.0"
 description = "Loopback OAuth 2.0 callback server and shared HTML response page for Zed sign-in flows"

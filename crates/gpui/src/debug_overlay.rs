@@ -86,9 +86,7 @@ impl DebugFrameOverlay {
 
     pub(crate) fn record_frame(&mut self, draw_duration: Duration) {
         self.total_frame_count += 1;
-        if self.draw_durations.len() >= MAX_SAMPLES {
-            self.draw_durations.pop_front();
-        }
+        self.draw_durations.retain_back(MAX_SAMPLES - 1);
         self.draw_durations.push_back(draw_duration);
     }
 
@@ -354,6 +352,23 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn frame_statistics_keep_only_the_recent_sample_window() {
+        let mut overlay = DebugFrameOverlay::new();
+        overlay.set_mode(DebugFrameOverlayMode::Full);
+        overlay.record_frame(Duration::from_secs(10));
+        for _ in 0..MAX_SAMPLES {
+            overlay.record_frame(Duration::from_millis(20));
+        }
+        assert_eq!(overlay.lines()[3], "MAX  20.0 MS");
+        assert_eq!(overlay.lines()[4], "FRAMES  1001");
+        overlay.reset_stats();
+        overlay.record_frame(Duration::from_millis(30));
+        assert_eq!(overlay.lines()[0], "CUR  30.0 MS");
+        assert_eq!(overlay.lines()[3], "MAX  30.0 MS");
+        assert_eq!(overlay.lines()[4], "FRAMES  1002");
     }
 
     #[test]
