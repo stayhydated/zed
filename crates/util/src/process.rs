@@ -211,13 +211,14 @@ mod windows_tests {
     fn spawn_process_tree(temp_dir: &std::path::Path) -> (Child, u32) {
         let pid_file = temp_dir.join("grandchild_pid");
         let mut command = std::process::Command::new("powershell.exe");
-        command.args(["-NoProfile", "-Command"]).arg(format!(
-            "$p = Start-Process -FilePath ping.exe -ArgumentList @('-n','60','127.0.0.1') -PassThru -WindowStyle Hidden; \
+        command.args(["-NoProfile", "-NonInteractive", "-Command"]).arg(format!(
+            "$ErrorActionPreference = 'Stop'; \
+             $p = Start-Process -FilePath ping.exe -ArgumentList @('-n','60','127.0.0.1') -PassThru -WindowStyle Hidden; \
              Set-Content -LiteralPath '{}' -Value $p.Id; \
              Wait-Process -Id $p.Id",
             pid_file.display()
         ));
-        let child = Child::spawn(command, Stdio::null(), Stdio::null(), Stdio::null())
+        let mut child = Child::spawn(command, Stdio::null(), Stdio::null(), Stdio::inherit())
             .expect("failed to spawn powershell");
 
         let deadline = Instant::now() + Duration::from_secs(5);
@@ -227,6 +228,13 @@ mod windows_tests {
             {
                 break pid;
             }
+            assert!(
+                child
+                    .try_status()
+                    .expect("failed to check powershell status")
+                    .is_none(),
+                "powershell exited before writing the grandchild pid file"
+            );
             assert!(
                 Instant::now() < deadline,
                 "timed out waiting for grandchild pid file"

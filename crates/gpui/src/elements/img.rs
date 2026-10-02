@@ -643,7 +643,7 @@ impl Asset for ImageAssetLoader {
                     let mut body = Vec::new();
                     response.body_mut().read_to_end(&mut body).await?;
                     if !response.status().is_success() {
-                        let mut body = String::from_utf8_lossy(&body).into_owned();
+                        let mut body = String::from_utf8_lossy_owned(body);
                         let first_line = body.lines().next().unwrap_or("").trim_end();
                         body.truncate(first_line.len());
                         return Err(ImageCacheError::BadStatus {
@@ -803,6 +803,7 @@ impl From<image::ImageError> for ImageCacheError {
 mod tests {
     use super::*;
     use crate::{ParentElement as _, TestAppContext, canvas, div, point, px, size};
+    use futures::FutureExt as _;
     use image::{Frame, ImageBuffer, Rgba};
 
     const TEST_IMG_ID: &str = "test-img";
@@ -833,6 +834,44 @@ mod tests {
                 });
             },
         )
+    }
+
+    #[gpui::test]
+    async fn failed_image_response_preserves_lossy_first_line(cx: &mut TestAppContext) {
+        let uri: SharedUri = "https://example.com/image.png".into();
+        for (bytes, expected) in [
+            (Vec::new(), ""),
+            ("café  \nmore details".as_bytes().to_vec(), "café"),
+            (vec![b'a', 0xff, b'b'], "a\u{fffd}b"),
+            (vec![0xe2, 0x82], "\u{fffd}"),
+        ] {
+            let client = http_client::FakeHttpClient::create(move |_| {
+                let bytes = bytes.clone();
+                async move {
+                    Ok(http_client::Response::builder()
+                        .status(http_client::StatusCode::BAD_GATEWAY)
+                        .body(bytes.into())?)
+                }
+            });
+            let load = cx.update(|cx| {
+                cx.set_http_client(client);
+                ImageAssetLoader::load(Resource::Uri(uri.clone()), cx).boxed()
+            });
+            let error = load
+                .await
+                .expect_err("the HTTP response must remain an error");
+            let ImageCacheError::BadStatus {
+                uri: actual_uri,
+                status,
+                body,
+            } = error
+            else {
+                panic!("unexpected error: {error}");
+            };
+            assert_eq!(actual_uri, uri);
+            assert_eq!(status, http_client::StatusCode::BAD_GATEWAY);
+            assert_eq!(body, expected);
+        }
     }
 
     #[gpui::test]

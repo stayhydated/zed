@@ -2,6 +2,7 @@
 authors = ["Nathan Sobo <nathan@zed.dev>"]
 default-run = "collab"
 edition.workspace = true
+rust-version.workspace = true
 name = "collab"
 version = "0.44.0"
 publish.workspace = true
