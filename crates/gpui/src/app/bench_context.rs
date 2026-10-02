@@ -1352,6 +1352,7 @@ impl VisualContext for BenchWindowContext<'_, '_> {
 
 #[cfg(test)]
 mod tests {
+    use scheduler::SpawnTime;
     use std::{
         rc::Rc,
         sync::{
@@ -1361,7 +1362,10 @@ mod tests {
     };
 
     use super::*;
-    use crate::profiler::journal::install_test_foreground_journal;
+    use crate::profiler::{
+        TaskTiming, YieldTime,
+        journal::{begin_foreground_turn, install_test_foreground_journal, record_task_poll},
+    };
 
     /// Runs `benchmark` under a wall-time primary with a fake counter as the
     /// secondary metric and returns the per-iteration values the report
@@ -1491,23 +1495,30 @@ mod tests {
     #[test]
     fn foreground_work_excludes_setup_before_trace_scope_starts() {
         let (journal, _journal_guard) = install_test_foreground_journal(1024, 64);
-        let dispatcher = Arc::new(ThreadedDispatcher::new());
-        let foreground_executor = ForegroundExecutor::new(dispatcher);
+        let setup_start = scheduler::Instant::now();
+        let measured_start = setup_start + Duration::from_millis(80);
 
         // Fixture/setup work that must not be attributed to the measurement:
         // a long poll recorded before the trace scope (and its journal
-        // collector) is created.
-        let setup_task = foreground_executor.spawn(async move {
-            std::thread::sleep(Duration::from_millis(80));
+        // collector) is created. Explicit timestamps keep this scope-isolation
+        // test independent of delays from scheduling a real sleeping task.
+        begin_foreground_turn();
+        record_task_poll(TaskTiming {
+            location: std::panic::Location::caller(),
+            spawned: SpawnTime(setup_start),
+            start: setup_start,
+            end: YieldTime(measured_start),
         });
-        run_task_to_completion(&foreground_executor, setup_task);
 
         let trace_scope = TraceScope::start(journal.collector());
 
-        let measured_task = foreground_executor.spawn(async move {
-            std::thread::sleep(Duration::from_millis(10));
+        begin_foreground_turn();
+        record_task_poll(TaskTiming {
+            location: std::panic::Location::caller(),
+            spawned: SpawnTime(measured_start),
+            start: measured_start,
+            end: YieldTime(measured_start + Duration::from_millis(10)),
         });
-        run_task_to_completion(&foreground_executor, measured_task);
 
         let events = trace_scope.finish();
         let report = BenchReport::default();
@@ -1516,6 +1527,16 @@ mod tests {
         let summary = report
             .foreground_work()
             .expect("the measured task's poll should be reported");
+        assert_eq!(
+            summary.count, 1,
+            "only the measured poll should be reported"
+        );
+        assert_eq!(summary.total, Duration::from_millis(10));
+        assert!(
+            summary.max > Duration::from_millis(5),
+            "the measured poll must contribute to the summary, got {:?}",
+            summary.max
+        );
         assert!(
             summary.max < Duration::from_millis(40),
             "setup work's 80ms poll must not leak into the measured summary, got {:?}",
