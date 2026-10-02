@@ -234,14 +234,18 @@ mod windows_tests {
                 std::io::stdin()
                     .read_exact(&mut [0])
                     .expect("failed to receive fixture start signal");
-                let status = fixture_command("grandchild", std::path::Path::new(&pid_file))
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::inherit())
-                    .spawn()
-                    .expect("failed to spawn grandchild fixture")
-                    .wait()
-                    .expect("failed to wait for grandchild fixture");
+                let mut command = smol::process::Command::from(fixture_command(
+                    "grandchild",
+                    std::path::Path::new(&pid_file),
+                ));
+                let status = smol::block_on(
+                    command
+                        .stdin(Stdio::null())
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::inherit())
+                        .status(),
+                )
+                .expect("failed to run grandchild fixture");
                 panic!("grandchild fixture exited unexpectedly: {status}");
             }
             "grandchild" => {
