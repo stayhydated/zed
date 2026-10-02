@@ -74,5 +74,26 @@ jobs:
         with:
           tool: nextest
       - run: cargo nextest run --locked --release -p gpui -p util --all-features --lib --no-fail-fast --no-tests=warn
-      - run: cargo test --locked --release -p util --doc
+      - run: cargo test --locked --release -p gpui -p util --all-features --doc
       - run: GITHUB_ACTIONS=1 ./script/clippy --locked -p gpui -p util -p gpui_platform
+  web:
+    if: github.repository == 'stayhydated/zed'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - run: rustup show
+      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c
+        with:
+          cache-on-failure: true
+      - run: cargo --config .cargo/ci-config.toml check --locked -p gpui --target wasm32-unknown-unknown --no-default-features --lib
+  nix:
+    if: github.repository == 'stayhydated/zed'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: cachix/install-nix-action@02a151ada4993995686f9ed4f1be7cfbb229e56f
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - run: nix eval --raw .#packages.x86_64-linux.default.drvPath
