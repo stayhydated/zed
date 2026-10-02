@@ -204,85 +204,22 @@ mod windows_job {
 #[cfg(all(test, windows))]
 mod windows_tests {
     use super::*;
-    use smol::io::AsyncWriteExt as _;
-    use std::io::Read as _;
     use std::time::{Duration, Instant};
 
-    const FIXTURE_STAGE: &str = "ZED_UTIL_PROCESS_TREE_TEST_STAGE";
-    const PID_FILE: &str = "ZED_UTIL_PROCESS_TREE_TEST_PID_FILE";
-    const FIXTURE_TEST: &str = "process::windows_tests::test_drop_terminates_grandchildren";
-
-    fn fixture_command(stage: &str, pid_file: &std::path::Path) -> std::process::Command {
-        let mut command = std::process::Command::new(std::env::current_exe().unwrap());
-        command
-            .args(["--exact", FIXTURE_TEST, "--nocapture"])
-            .env(FIXTURE_STAGE, stage)
-            .env(PID_FILE, pid_file);
-        command
-    }
-
-    /// Runs the same test executable as a fixture, without a shell or network service.
-    fn run_process_tree_fixture() {
-        let Some(stage) = std::env::var_os(FIXTURE_STAGE) else {
-            return;
-        };
-        let pid_file = std::env::var_os(PID_FILE).expect("missing fixture pid file");
-        match stage.to_str().expect("invalid fixture stage") {
-            "child" => {
-                // Wait until Child::spawn has assigned us to its job object, so the
-                // grandchild cannot escape through the documented assignment race.
-                std::io::stdin()
-                    .read_exact(&mut [0])
-                    .expect("failed to receive fixture start signal");
-                let mut command = smol::process::Command::from(fixture_command(
-                    "grandchild",
-                    std::path::Path::new(&pid_file),
-                ));
-                let status = smol::block_on(
-                    command
-                        .stdin(Stdio::null())
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::inherit())
-                        .status(),
-                )
-                .expect("failed to run grandchild fixture");
-                panic!("grandchild fixture exited unexpectedly: {status}");
-            }
-            "grandchild" => {
-                std::fs::write(pid_file, std::process::id().to_string())
-                    .expect("failed to write grandchild pid");
-                loop {
-                    std::thread::park();
-                }
-            }
-            stage => panic!("unknown fixture stage: {stage}"),
-        }
-    }
-
-    /// Spawns two nested copies of the test executable via `Child::spawn` and
-    /// returns the `Child` along with the pid of the grandchild.
+    /// Spawns a process tree `powershell -> ping` via `Child::spawn` and
+    /// returns the `Child` along with the pid of the grandchild (`ping`).
     fn spawn_process_tree(temp_dir: &std::path::Path) -> (Child, u32) {
         let pid_file = temp_dir.join("grandchild_pid");
-        let mut child = Child::spawn(
-            fixture_command("child", &pid_file),
-            Stdio::piped(),
-            Stdio::null(),
-            Stdio::inherit(),
-        )
-        .expect("failed to spawn child fixture");
-        assert!(child.job.is_some(), "child fixture must belong to a job");
-        smol::block_on(async {
-            let mut stdin = child.stdin.take().expect("missing child fixture stdin");
-            stdin
-                .write_all(&[1])
-                .await
-                .expect("failed to start child fixture");
-            // Windows buffers async pipe writes. Flush before dropping the handle.
-            stdin
-                .flush()
-                .await
-                .expect("failed to flush fixture start signal");
-        });
+        let mut command = std::process::Command::new("powershell.exe");
+        command.args(["-NoProfile", "-NonInteractive", "-Command"]).arg(format!(
+            "$ErrorActionPreference = 'Stop'; \
+             $p = Start-Process -FilePath ping.exe -ArgumentList @('-n','60','127.0.0.1') -PassThru -WindowStyle Hidden; \
+             Set-Content -LiteralPath '{}' -Value $p.Id; \
+             Wait-Process -Id $p.Id",
+            pid_file.display()
+        ));
+        let mut child = Child::spawn(command, Stdio::null(), Stdio::null(), Stdio::inherit())
+            .expect("failed to spawn powershell");
 
         let deadline = Instant::now() + Duration::from_secs(5);
         let grandchild_pid = loop {
@@ -294,9 +231,9 @@ mod windows_tests {
             assert!(
                 child
                     .try_status()
-                    .expect("failed to check child fixture status")
+                    .expect("failed to check powershell status")
                     .is_none(),
-                "child fixture exited before writing the grandchild pid file"
+                "powershell exited before writing the grandchild pid file"
             );
             assert!(
                 Instant::now() < deadline,
@@ -354,7 +291,6 @@ mod windows_tests {
 
     #[test]
     fn test_drop_terminates_grandchildren() {
-        run_process_tree_fixture();
         let temp_dir = tempfile::tempdir().unwrap();
         let (child, grandchild_pid) = spawn_process_tree(temp_dir.path());
 
