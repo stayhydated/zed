@@ -46,7 +46,7 @@ use pathfinder_geometry::{
     vector::Vector2F,
 };
 use smallvec::SmallVec;
-use std::{borrow::Cow, convert::TryFrom, sync::Arc, sync::OnceLock};
+use std::{borrow::Cow, char, convert::TryFrom, sync::Arc, sync::OnceLock};
 
 use crate::open_type::apply_features_and_fallbacks;
 

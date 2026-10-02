@@ -272,7 +272,6 @@ default-members = ["crates/zed"]
 [workspace.package]
 publish = false
 edition = "2024"
-rust-version = "1.99"
 
 [workspace.dependencies]
 
@@ -1047,7 +1046,7 @@ codegen-units = 16
 split-debuginfo = "unpacked"
 debug = "limited"
 
-# Keep the full-debuginfo profile distinct from Cargo's built-in debug profile.
+# "debug" is a reserved profile name.
 [profile.dbg]
 inherits = "dev"
 debug = "full"

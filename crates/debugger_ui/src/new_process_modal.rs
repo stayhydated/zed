@@ -5,6 +5,7 @@ use std::{
     borrow::Cow,
     path::{Path, PathBuf},
     sync::Arc,
+    usize,
 };
 use tasks_ui::{TaskOverrides, TasksModal};
 

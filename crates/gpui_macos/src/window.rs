@@ -1743,7 +1743,7 @@ impl PlatformWindow for MacWindow {
             button.setTag(ix as NSInteger);
 
             if answer.is_cancel() {
-                if let Some(key) = char::from_u32(crate::events::ESCAPE_KEY as u32) {
+                if let Some(key) = core::char::from_u32(crate::events::ESCAPE_KEY as u32) {
                     let key = NSString::from_str(&key.to_string());
                     button.setKeyEquivalent(&key);
                 }

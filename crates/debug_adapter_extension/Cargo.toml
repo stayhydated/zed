@@ -4,7 +4,6 @@ version = "0.1.0"
 license = "GPL-3.0-or-later"
 publish.workspace = true
 edition.workspace = true
-rust-version.workspace = true
 
 [dependencies]
 anyhow.workspace = true

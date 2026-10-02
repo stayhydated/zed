@@ -1,7 +1,6 @@
 [package]
 description = "Shared protocol for communication between the Zed app and the zed.dev server"
 edition.workspace = true
-rust-version.workspace = true
 name = "proto"
 version = "0.1.0"
 publish.workspace = true

@@ -3,7 +3,6 @@ name = "tabular_data_preview"
 version = "0.1.0"
 publish.workspace = true
 edition.workspace = true
-rust-version.workspace = true
 
 [lib]
 path = "src/tabular_data_preview.rs"

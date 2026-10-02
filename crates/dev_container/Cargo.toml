@@ -3,7 +3,6 @@ name = "dev_container"
 version = "0.1.0"
 publish.workspace = true
 edition.workspace = true
-rust-version.workspace = true
 
 [lib]
 doctest = false

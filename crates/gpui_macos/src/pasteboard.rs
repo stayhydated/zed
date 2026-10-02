@@ -122,7 +122,7 @@ impl Pasteboard {
 
             let text_bytes = self.data_for_type(string_type)?;
 
-            let text = String::from_utf8_lossy_owned(text_bytes);
+            let text = String::from_utf8_lossy(&text_bytes).to_string();
             let metadata = self
                 .data_for_type(*self.text_hash_type)
                 .and_then(|hash_bytes| {
