@@ -268,13 +268,16 @@ mod windows_tests {
         .expect("failed to spawn child fixture");
         assert!(child.job.is_some(), "child fixture must belong to a job");
         smol::block_on(async {
-            child
-                .stdin
-                .take()
-                .expect("missing child fixture stdin")
+            let mut stdin = child.stdin.take().expect("missing child fixture stdin");
+            stdin
                 .write_all(&[1])
                 .await
                 .expect("failed to start child fixture");
+            // Windows buffers async pipe writes. Flush before dropping the handle.
+            stdin
+                .flush()
+                .await
+                .expect("failed to flush fixture start signal");
         });
 
         let deadline = Instant::now() + Duration::from_secs(5);
