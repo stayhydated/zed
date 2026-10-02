@@ -803,6 +803,7 @@ impl From<image::ImageError> for ImageCacheError {
 mod tests {
     use super::*;
     use crate::{ParentElement as _, TestAppContext, canvas, div, point, px, size};
+    use futures::FutureExt as _;
     use image::{Frame, ImageBuffer, Rgba};
 
     const TEST_IMG_ID: &str = "test-img";
@@ -854,7 +855,7 @@ mod tests {
             });
             let load = cx.update(|cx| {
                 cx.set_http_client(client);
-                ImageAssetLoader::load(Resource::Uri(uri.clone()), cx)
+                ImageAssetLoader::load(Resource::Uri(uri.clone()), cx).boxed()
             });
             let error = load
                 .await

@@ -38,6 +38,9 @@ jobs:
       - run: ./script/linux
       - run: ./script/download-wasi-sdk
       - run: rustup show
+      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c
+        with:
+          cache-on-failure: true
       - run: |
           mkdir -p ../.cargo
           cp .cargo/ci-config.toml ../.cargo/config.toml
@@ -61,9 +64,15 @@ jobs:
       - if: runner.os == 'Linux'
         run: ./script/linux
       - run: rustup show
+      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c
+        with:
+          cache-on-failure: true
       - run: |
           mkdir -p ../.cargo
           cp .cargo/ci-config.toml ../.cargo/config.toml
-      - run: cargo test --locked --release -p gpui -p util --all-features --lib
+      - uses: taiki-e/install-action@a6b2e2dcd845ddd7f509ce4f3ed3d922b80cc5d9
+        with:
+          tool: nextest
+      - run: cargo nextest run --locked --release -p gpui -p util --all-features --lib --no-fail-fast --no-tests=warn
       - run: cargo test --locked --release -p util --doc
       - run: GITHUB_ACTIONS=1 ./script/clippy --locked -p gpui -p util -p gpui_platform
