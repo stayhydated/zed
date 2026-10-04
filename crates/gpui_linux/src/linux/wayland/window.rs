@@ -1704,31 +1704,28 @@ impl PlatformWindow for WaylandWindow {
             return;
         }
 
-        // Keep window geometry consistent with configure handling. On Wayland, window geometry is
-        // surface-local: resizing should not attempt to translate the window; the compositor
-        // controls placement. We also account for client-side decoration insets and tiling.
-        let window_geometry = inset_by_tiling(
-            Bounds {
-                origin: Point::default(),
-                size,
-            },
-            state.inset(),
-            state.tiling,
-        )
-        .map(|v| f32::from(v) as i32)
-        .map_size(|v| if v <= 0 { 1 } else { v });
-
-        state.surface_state.set_geometry(
-            window_geometry.origin.x,
-            window_geometry.origin.y,
-            window_geometry.size.width,
-            window_geometry.size.height,
-        );
-
         state
             .globals
             .executor
-            .spawn(async move { state_ptr.resize(size) })
+            .spawn(async move {
+                state_ptr.resize(size);
+                let state = state_ptr.state.borrow();
+                // Apply geometry after resizing the drawable so it cannot be committed
+                // with the previous buffer while the asynchronous resize is pending.
+                let window_geometry = inset_by_tiling(
+                    state.bounds.map_origin(|_| px(0.0)),
+                    state.inset(),
+                    state.tiling,
+                )
+                .map(|value| f32::from(value) as i32)
+                .map_size(|value| if value <= 0 { 1 } else { value });
+                state.surface_state.set_geometry(
+                    window_geometry.origin.x,
+                    window_geometry.origin.y,
+                    window_geometry.size.width,
+                    window_geometry.size.height,
+                );
+            })
             .detach();
     }
 
