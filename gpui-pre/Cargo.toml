@@ -1,4 +1,4 @@
-# Git patch packages for applications using the gpui-pre 0.3.7 snapshot.
+# Git patch packages for applications using the gpui-pre 0.3.11 snapshot.
 # Library targets compile the canonical Zed sources in ../../crates.
 [workspace]
 members = ["linux", "platform", "wgpu"]

@@ -2482,7 +2482,7 @@ impl OffscreenRenderTarget {
             })?
             .map_err(|error| anyhow::anyhow!("Failed to map offscreen readback buffer: {error}"))?;
 
-        let mapped_data = readback_buffer.slice(..).get_mapped_range();
+        let mapped_data = readback_buffer.slice(..).get_mapped_range()?;
         let pixel_capacity = usize::try_from(u64::from(bytes_per_row) * u64::from(height))
             .map_err(|_| anyhow::anyhow!("Offscreen image size exceeds addressable memory"))?;
         let mut pixels = Vec::with_capacity(pixel_capacity);
@@ -2592,7 +2592,6 @@ impl WgpuHeadlessRenderer {
             .render_frame(scene, &view, size, false, wgpu::Color::BLACK)?;
         Ok(())
     }
-
 }
 
 #[cfg(all(
@@ -2864,6 +2863,7 @@ mod tests {
                 core: WgpuRendererCore::new(context, atlas.clone(), format, alpha_mode),
             },
             surface_config: wgpu::SurfaceConfiguration {
+                color_space: Default::default(),
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
                 format,
                 width: 13,

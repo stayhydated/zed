@@ -2068,7 +2068,11 @@ impl PlatformWindow for WaylandWindow {
 
     #[cfg(feature = "test-support")]
     fn render_to_image(&self, scene: &Scene) -> anyhow::Result<image::RgbaImage> {
-        self.borrow_mut().renderer.render_to_image(scene)
+        self.borrow_mut()
+            .renderer
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("window renderer is unavailable"))?
+            .render_to_image(scene)
     }
 
     fn schedule_frame(&self) {

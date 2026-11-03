@@ -1987,7 +1987,13 @@ impl PlatformWindow for X11Window {
 
     #[cfg(feature = "test-support")]
     fn render_to_image(&self, scene: &Scene) -> anyhow::Result<image::RgbaImage> {
-        self.0.state.borrow_mut().renderer.render_to_image(scene)
+        self.0
+            .state
+            .borrow_mut()
+            .renderer
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("window renderer is unavailable"))?
+            .render_to_image(scene)
     }
 
     fn a11y_init(&self, callbacks: gpui::A11yCallbacks) {

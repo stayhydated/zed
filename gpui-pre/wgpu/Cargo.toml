@@ -1,70 +1,188 @@
-# Dependency names and versions follow the published gpui-pre 0.3.7 manifests.
 [package]
-name = "gpui-pre-wgpu"
-version = "0.3.7"
 edition = "2024"
+name = "gpui-pre-wgpu"
+version = "0.3.11"
+build = false
 publish = false
+autolib = false
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+description = "Zed wgpu backend with Linux window capture for gpui-pre 0.3.11"
+readme = false
 license = "Apache-2.0"
-description = "Zed wgpu backend for gpui-pre 0.3.7 with Wayland image capture"
+repository = "https://github.com/zed-industries/zed"
+resolver = "2"
 
 [package.metadata.gpui-pre]
 zed-crate = "gpui_wgpu"
-# Published dependencies originate from this snapshot; library sources use this branch.
-dependency-snapshot-rev = "1a28cff4b409169bac058bca40dfbfeb7621d19b"
+zed-version = "0.1.0"
+zed-rev = "ce6c5413f1"
+
+[features]
+bench-support = [
+    "gpui/bench-support",
+    "dep:image",
+]
+default = []
+font-kit = ["dep:font-kit"]
+test-support = [
+    "gpui/test-support",
+    "dep:image",
+]
 
 [lib]
 name = "gpui_wgpu"
 path = "../../crates/gpui_wgpu/src/gpui_wgpu.rs"
 doctest = false
 
-[features]
-default = []
-bench-support = ["gpui/bench-support", "dep:image"]
-font-kit = ["dep:font-kit"]
-test-support = ["gpui/test-support", "dep:image"]
+[[bench]]
+name = "layout_line"
+path = "benches/layout_line.rs"
+harness = false
 
-[dependencies]
-anyhow = { version = "1.0.86" }
-bytemuck = { version = "1" }
-collections = { version = "=0.3.7", package = "gpui-pre-collections" }
-cosmic-text = { version = "0.19.0" }
-etagere = { version = "0.2" }
-font-kit = { version = "0.14.1-zed", optional = true, package = "zed-font-kit" }
-gpui = { version = "=0.3.7", default-features = false, package = "gpui-pre" }
-gpui_util = { version = "=0.3.7", package = "gpui-pre-util" }
-image = { version = "0.25.1", features = [
-  "bmp",
-  "dds",
-  "exr",
-  "ff",
-  "gif",
-  "hdr",
-  "ico",
-  "jpeg",
-  "png",
-  "pnm",
-  "qoi",
-  "rayon",
-  "tga",
-  "tiff",
-  "webp",
-], optional = true, default-features = false }
-itertools = { version = "0.14.0" }
-log = { version = "0.4.16", features = ["kv_unstable_serde", "serde"] }
-parking_lot = { version = "0.12.1" }
-profiling = { version = "1" }
-raw-window-handle = { version = "0.6" }
-smallvec = { version = "1.6", features = ["union", "const_new"] }
-swash = { version = "0.2.6" }
-unicode-bidi = { version = "0.3.18", features = [
-  "hardcoded-data",
-], default-features = false }
-unicode-segmentation = { version = "1.10" }
-wgpu = { version = "29.0.4" }
+[dependencies.anyhow]
+version = "1.0.86"
 
-[target.'cfg(target_family = "wasm")'.dependencies]
-web-sys = { version = "0.3", features = ["HtmlCanvasElement"] }
-wgpu = { version = "29.0.4", features = ["webgl"] }
+[dependencies.bytemuck]
+version = "1"
 
-[lints]
-workspace = true
+[dependencies.collections]
+version = "=0.3.11"
+package = "gpui-pre-collections"
+
+[dependencies.cosmic-text]
+version = "0.19.0"
+
+[dependencies.etagere]
+version = "0.2"
+
+[dependencies.font-kit]
+version = "0.14.1-zed"
+optional = true
+default-features = false
+package = "zed-font-kit"
+
+[dependencies.gpui]
+version = "=0.3.11"
+default-features = false
+package = "gpui-pre"
+
+[dependencies.gpui_util]
+version = "=0.3.11"
+package = "gpui-pre-util"
+
+[dependencies.image]
+version = "0.25.1"
+features = [
+    "bmp",
+    "dds",
+    "exr",
+    "ff",
+    "gif",
+    "hdr",
+    "ico",
+    "jpeg",
+    "png",
+    "pnm",
+    "qoi",
+    "rayon",
+    "tga",
+    "tiff",
+    "webp",
+]
+optional = true
+default-features = false
+
+[dependencies.itertools]
+version = "0.14.0"
+
+[dependencies.log]
+version = "0.4"
+features = ["std"]
+default-features = false
+
+[dependencies.parking_lot]
+version = "0.12.1"
+
+[dependencies.profiling]
+version = "1"
+
+[dependencies.raw-window-handle]
+version = "0.6"
+
+[dependencies.smallvec]
+version = "1.6"
+features = [
+    "union",
+    "const_new",
+]
+
+[dependencies.swash]
+version = "0.2.6"
+
+[dependencies.unicode-bidi]
+version = "0.3.18"
+features = ["hardcoded-data"]
+default-features = false
+
+[dependencies.unicode-segmentation]
+version = "1.10"
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies.wgpu]
+git = "https://github.com/gfx-rs/wgpu"
+rev = "cddb2f5d80dc0009b2ef6767635140cacf90a007"
+features = [
+    "std",
+    "metal",
+    "gles",
+    "vulkan",
+    "wgsl",
+    "webgpu",
+]
+default-features = false
+package = "wgpu"
+
+[target.'cfg(not(any(target_os = "linux", target_os = "freebsd")))'.dependencies.wgpu]
+git = "https://github.com/gfx-rs/wgpu"
+rev = "cddb2f5d80dc0009b2ef6767635140cacf90a007"
+default-features = true
+package = "wgpu"
+
+[target.'cfg(target_family = "wasm")'.dependencies.web-sys]
+version = "0.3"
+features = ["HtmlCanvasElement"]
+
+[target.'cfg(target_family = "wasm")'.dependencies.wgpu]
+git = "https://github.com/gfx-rs/wgpu"
+rev = "cddb2f5d80dc0009b2ef6767635140cacf90a007"
+features = ["webgl"]
+default-features = false
+package = "wgpu"
+
+[lints.clippy]
+dbg_macro = "deny"
+declare_interior_mutable_const = "deny"
+disallowed_methods = "deny"
+large_enum_variant = "allow"
+let_underscore_future = "allow"
+nonminimal_bool = "allow"
+redundant_clone = "deny"
+single_range_in_vec_init = "allow"
+todo = "deny"
+too_many_arguments = "allow"
+type_complexity = "allow"
+
+[lints.clippy.style]
+level = "allow"
+priority = -1
+
+[lints.rust.unexpected_cfgs]
+level = "allow"
+priority = 0
+
+[dev-dependencies.naga]
+git = "https://github.com/gfx-rs/wgpu"
+rev = "cddb2f5d80dc0009b2ef6767635140cacf90a007"
+features = ["wgsl-in"]
