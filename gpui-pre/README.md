@@ -7,8 +7,15 @@ window's renderer and glyph atlas. Its Wgpu dependency follows the exact
 revision selected by that upstream source.
 
 `Cargo.lock` records the standalone package graph. Validate the backend with
-`cargo check --manifest-path gpui-pre/Cargo.toml -p gpui-pre-platform --features test-support --locked`
-and `cargo test --manifest-path gpui-pre/Cargo.toml -p gpui-pre-wgpu --lib --features test-support --locked`.
+these focused commands:
+
+```sh
+cargo check --manifest-path gpui-pre/Cargo.toml \
+  -p gpui-pre-platform --features test-support --locked
+cargo test --manifest-path gpui-pre/Cargo.toml \
+  -p gpui-pre-wgpu --lib --features test-support --locked
+```
+
 The `wayland_capture` integration test requires a private Wayland compositor;
 run its ignored test with `--features test-support -- --ignored`.
 
