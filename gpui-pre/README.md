@@ -2,9 +2,13 @@
 
 The `linux`, `platform`, and `wgpu` packages compile the canonical Zed sources
 for applications using `gpui-pre =0.3.11`. The capture branch includes upstream
-`main` at `ce6c5413f1` and retains Linux window-image readback through the
+`main` at `784374c679` and retains Linux window-image readback through the
 window's renderer and glyph atlas. Its Wgpu dependency follows the exact
-revision selected by that upstream source.
+revision selected by that upstream source. The canonical Linux and WGPU runtime
+sources
+are unchanged since the published snapshot's recorded Zed revision. Package
+adapters retain their selected Wgpu APIs; GPUI core and benchmark changes follow
+their own upstream release boundary.
 
 `Cargo.lock` records the standalone package graph. Validate the backend with
 these focused commands:

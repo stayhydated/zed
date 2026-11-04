@@ -18,7 +18,7 @@ resolver = "2"
 [package.metadata.gpui-pre]
 zed-crate = "gpui_wgpu"
 zed-version = "0.1.0"
-zed-rev = "ce6c5413f1"
+zed-rev = "784374c679"
 
 [features]
 bench-support = [

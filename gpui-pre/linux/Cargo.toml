@@ -21,7 +21,7 @@ ignored = ["scap"]
 [package.metadata.gpui-pre]
 zed-crate = "gpui_linux"
 zed-version = "0.1.0"
-zed-rev = "ce6c5413f1"
+zed-rev = "784374c679"
 
 [features]
 default = [
