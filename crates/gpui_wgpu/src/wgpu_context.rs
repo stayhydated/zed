@@ -467,6 +467,8 @@ impl WgpuContext {
             .using_resolution(adapter.limits())
             .using_alignment(adapter.limits());
 
+        // The crates.io snapshot has no queue field; upstream defaults it.
+        #[allow(clippy::needless_update)]
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("gpui_device"),
@@ -475,7 +477,7 @@ impl WgpuContext {
                 memory_hints: wgpu::MemoryHints::MemoryUsage,
                 trace: wgpu::Trace::Off,
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
-                default_queue: wgpu::QueueDescriptor::default(),
+                ..Default::default()
             })
             .await
             .map_err(|e| anyhow::anyhow!("Failed to create wgpu device: {e}"))?;

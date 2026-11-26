@@ -416,6 +416,8 @@ mod tests {
                 })
                 .await
                 .map_err(|error| anyhow::anyhow!("failed to request adapter: {error}"))?;
+            // The crates.io snapshot has no queue field; upstream defaults it.
+            #[allow(clippy::needless_update)]
             let (device, queue) = adapter
                 .request_device(&wgpu::DeviceDescriptor {
                     label: Some("wgpu_atlas_test_device"),
@@ -426,7 +428,7 @@ mod tests {
                     memory_hints: wgpu::MemoryHints::MemoryUsage,
                     trace: wgpu::Trace::Off,
                     experimental_features: wgpu::ExperimentalFeatures::disabled(),
-                    default_queue: wgpu::QueueDescriptor::default(),
+                    ..Default::default()
                 })
                 .await
                 .map_err(|error| anyhow::anyhow!("failed to request device: {error}"))?;
